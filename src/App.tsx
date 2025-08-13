@@ -9,7 +9,6 @@ import './App.css';
 function App() {
   return (
     <>
-      <h1>Real Time Chat</h1>
       <Switch>
         <Route path='/' component={LoginPage} />
         <Route path='/chat' component={ChatPage} />
