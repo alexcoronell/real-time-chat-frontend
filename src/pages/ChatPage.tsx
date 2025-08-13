@@ -1,7 +1,11 @@
 import { AppSidebar } from '@/components/app-sidebar';
-import { Switch } from "@/components/ui/switch"
+import { Sun, Moon } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 
 import ChatArea from '@/components/chat-area';
+
+import { useTheme } from '@/components/theme-provider';
+
 
 import {
   SidebarInset,
@@ -9,7 +13,12 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 
-function ChatPage() {
+export default function ChatPage() {
+  const { theme, setTheme } = useTheme();
+  const handleToggle = (checked: boolean) => {
+    setTheme(checked ? 'dark' : 'light');
+  };
+
   return (
     <>
       <SidebarProvider>
@@ -17,7 +26,15 @@ function ChatPage() {
         <SidebarInset className='p-3 h-screen flex flex-col gap-3'>
           <header className='bg-muted/50 rounded-xl p-2 flex items-center justify-between grow-0 border'>
             <SidebarTrigger />
-            <Switch />
+            <div className="flex items-center gap-2">
+              <Sun className='size-5' />
+            <Switch
+              id='theme-toggle'
+              checked={theme === 'dark'}
+              onCheckedChange={handleToggle}
+            />
+            <Moon className='size-5' />
+            </div>
           </header>
           <ChatArea />
         </SidebarInset>
@@ -25,5 +42,3 @@ function ChatPage() {
     </>
   );
 }
-
-export default ChatPage;
