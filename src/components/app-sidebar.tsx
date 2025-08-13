@@ -63,7 +63,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-start rounded-lg">
+                <div className="flex aspect-square size-8 items-center justify-start rounded-lg">
                   <GalleryVerticalEnd className="size-4" />
                   <span>Usuario</span>
                   <span>Status</span>
