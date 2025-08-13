@@ -1,35 +1,73 @@
 import { GalleryVerticalEnd } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 
 import { cn } from '@/lib/utils';
+
 import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+
+const formSchema = z.object({
+  nickname: z.string().min(4, {
+    message: 'El nickname es obligatorio, debe tener al menos 4 letras',
+  })
+});
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<'div'>) {
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      nickname: '',
+    },
+  });
+
+  function onSubmit(values: z.infer<typeof formSchema>) {
+    console.log(values);
+  }
   return (
     <div className={cn('flex flex-col gap-6', className)} {...props}>
-      <form>
-        <div className='flex flex-col gap-6'>
-          <div className='flex flex-col items-center gap-2'>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className='flex flex-col gap-6'>
+             <div className='flex flex-col items-center gap-2'>
             <div className='flex size-8 items-center justify-center rounded-md'>
               <GalleryVerticalEnd className='size-6' />
             </div>
-            <h1 className='text-xl font-bold'>Bienvenido al chat de SDH Inc.</h1>
+            <h1 className='text-xl font-bold'>
+              Bienvenido al chat de SDH Inc.
+            </h1>
           </div>
-          <div className='flex flex-col gap-6'>
-            <div className='grid gap-3'>
-              <Label htmlFor='nickname'>Nickname</Label>
-              <Input id='nickname' type='nickname' required />
-            </div>
-            <Button type='submit' className='w-full'>
+            <FormField
+              control={form.control}
+              name='nickname'
+              render={({ field }) => (
+                <FormItem className='relative'>
+                  <FormLabel>Nickname</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage className='text-xs absolute bottom-[-1rem] top-auto' />
+                </FormItem>
+              )}
+            ></FormField>
+            <Button type='submit' className='w-full mt-1'>
               Ingresar
             </Button>
           </div>
-        </div>
-      </form>
+        </form>
+      </Form>
     </div>
   );
 }
