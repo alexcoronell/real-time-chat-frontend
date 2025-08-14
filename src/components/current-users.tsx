@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useEffect } from 'react';
+import { useSocket } from '@/hooks/useSocket';
+
 import {
   SidebarGroup,
   SidebarMenu,
@@ -9,13 +10,12 @@ import {
 import { useChatStore } from '@/stores/useChatStore';
 import type { User } from '@/types/user';
 
-const SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL;
-
 export function CurrentUsers() {
-  const socketRef = useRef<Socket | null>(null);
+  const { socket, isConnected } = useSocket();
   const onlineUsers = useChatStore((state) => state.onlineUsers);
   const setOnlineUsers = useChatStore((state) => state.setOnlineUsers);
   const currentUser = useChatStore((state) => state.user);
+  const nickname = useChatStore((state) => state.nickname); // ✅ Agregar nickname del store
   const loadingConversation = useChatStore(
     (state) => state.loadingConversation
   );
@@ -24,55 +24,15 @@ export function CurrentUsers() {
   );
 
   useEffect(() => {
-    if (!SERVER_URL || !currentUser?.nickname) {
-      console.error(
-        'VITE_SOCKET_SERVER_URL o el nickname del usuario no están definidos.'
-      );
-      return;
-    }
+    if (!socket || !isConnected) return;
 
-    const socket = io(SERVER_URL, {
-      path: '/socket.io',
-      transports: ['polling', 'websocket'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
-      timeout: 20000,
-    });
-
-    socketRef.current = socket;
-
-    socket.on('connect', () => {
-      console.log('🔗 Conectado al servidor Socket.IO');
-      socket.emit('check_or_create_user', { nickname: currentUser.nickname });
-    });
-
+    // Event listeners específicos para este componente
     socket.on('users_online', (data: { count: number; users: User[] }) => {
       console.log(`👥 Lista de usuarios actualizada: ${data.count} usuarios`);
       setOnlineUsers(data.users);
     });
 
-    socket.on('check_or_create_user', (response) => {
-      if (response.success) {
-        console.log(
-          `✅ Usuario ${response.user.nickname} registrado correctamente.`
-        );
-      } else {
-        console.error('❌ Error al registrar el usuario:', response.error);
-      }
-    });
-
-    socket.on('connect_error', (error) => {
-      console.error('❌ Error de conexión:', error);
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.log('🔌 Desconectado del servidor:', reason);
-      setOnlineUsers([]);
-    });
-
-    // 🚨 CRÍTICO: Responder al heartbeat del servidor.
-    // Esto evita que el backend desconecte a los clientes inactivos.
+    // ✅ Heartbeat específico para este componente
     socket.on('heartbeat_request', () => {
       console.log(
         '💖 Heartbeat request recibido del servidor, respondiendo...'
@@ -80,45 +40,59 @@ export function CurrentUsers() {
       socket.emit('heartbeat_response');
     });
 
+    // ✅ Cleanup local - remover solo los listeners de este componente
     return () => {
-      if (socketRef.current) {
-        socketRef.current.off('connect');
-        socketRef.current.off('users_online');
-        socketRef.current.off('check_or_create_user');
-        socketRef.current.off('connect_error');
-        socketRef.current.off('disconnect');
-        socketRef.current.off('heartbeat_request'); // Limpiar el listener
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
+      socket.off('users_online');
+      socket.off('heartbeat_request');
     };
-  }, [setOnlineUsers, currentUser]);
+  }, [socket, isConnected, nickname, setOnlineUsers]);
 
+  // ✅ CORREGIDO: Usar socket directamente en lugar de socketRef
   const handleUserClick = (targetUser: User) => {
+    if (!socket || !isConnected || !currentUser?.id) {
+      console.error('❌ Socket no disponible o usuario no autenticado');
+      return;
+    }
+
     setLoadingConversation(true);
-    if (!socketRef.current || !currentUser?.id) return;
+
     const participantIds = [currentUser.id, targetUser.id];
     console.log(`💬 Solicitando chat con ${targetUser.nickname}`);
-    socketRef.current.emit('check_or_create_conversation', {
+
+    // ✅ CORREGIDO: Usar socket en lugar de socketRef.current
+    socket.emit('check_or_create_conversation', {
       participantIds,
     });
-    setLoadingConversation(false);
+
+    // ✅ OPCIONAL: Agregar timeout para el loading
+    setTimeout(() => {
+      setLoadingConversation(false);
+    }, 5000); // Reset loading después de 5 segundos si no hay respuesta
   };
 
-  const otherUsers = onlineUsers.filter((user) => user.id !== currentUser?.id);
+  // ✅ MEJORADO: Filtro más seguro
+  const otherUsers = onlineUsers.filter(
+    (user) => user.id !== currentUser?.id && user.nickname !== nickname
+  );
 
   return (
     <SidebarGroup>
       <div className='px-2 py-2'>
         <h3 className='text-sm font-medium text-gray-500 mb-2'>
           Otros Usuarios Conectados ({otherUsers.length})
+          {/* ✅ Agregar indicador de conexión */}
+          {!isConnected && (
+            <span className='ml-2 text-xs text-red-500'>⚠️</span>
+          )}
         </h3>
       </div>
       <SidebarMenu>
         {otherUsers.length === 0 ? (
           <SidebarMenuItem>
             <div className='px-2 py-1 text-sm text-gray-400'>
-              No hay otros usuarios conectados
+              {!isConnected
+                ? 'Desconectado del servidor'
+                : 'No hay otros usuarios conectados'}
             </div>
           </SidebarMenuItem>
         ) : (
@@ -126,12 +100,18 @@ export function CurrentUsers() {
             <SidebarMenuItem key={user.id}>
               <SidebarMenuButton
                 onDoubleClick={() => handleUserClick(user)}
-                disabled={loadingConversation}
+                disabled={loadingConversation || !isConnected}
               >
                 <div className='flex items-center gap-2'>
                   <div className='w-2 h-2 bg-green-500 rounded-full'></div>
                   <div className='flex flex-col'>
-                    <span className='text-sm font-medium'>{user.nickname}</span>
+                    <span className='text-sm font-medium'>
+                      {user.nickname}
+                      {/* ✅ Indicador de loading */}
+                      {loadingConversation && (
+                        <span className='ml-2 text-xs text-gray-400'>⏳</span>
+                      )}
+                    </span>
                   </div>
                 </div>
               </SidebarMenuButton>
