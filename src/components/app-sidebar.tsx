@@ -3,7 +3,6 @@ import * as React from "react"
 import {
     Sidebar,
     SidebarContent,
-    SidebarGroup,
     SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
@@ -13,6 +12,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import {CurrentUser} from "./current-user"
 import { CurrentUsers } from "./current-users"
+import { ChatList } from "./chat-list"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
@@ -28,25 +28,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
+      <Separator className="my-3" />
       <SidebarContent>
         <CurrentUsers/>
-        <SidebarGroup>
-           <Separator className="my-6" orientation="horizontal" />
-          <SidebarMenu>
-            Chats
-             <SidebarMenuItem>
-                <SidebarMenuButton>
-                    Chat 1
-                </SidebarMenuButton>
-                <SidebarMenuButton>
-                    Chat 2
-                </SidebarMenuButton>
-                <SidebarMenuButton>
-                    Chat 3
-                </SidebarMenuButton>
-             </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroup>
+        <Separator className="my-3" />
+        <ChatList />
       </SidebarContent>
       <SidebarRail />
     </Sidebar>
