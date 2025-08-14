@@ -1,5 +1,4 @@
 import * as React from "react"
-import { GalleryVerticalEnd } from "lucide-react"
 
 import {
     Sidebar,
@@ -12,6 +11,7 @@ import {
     SidebarRail,
 } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import {CurrentUser} from "./current-user"
 
 // This is sample data.
 const data = {
@@ -64,9 +64,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
                 <div className="flex aspect-square size-8 items-center justify-start rounded-lg">
-                  <GalleryVerticalEnd className="size-4" />
-                  <span>Usuario</span>
-                  <span>Status</span>
+                  <CurrentUser />
                 </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
