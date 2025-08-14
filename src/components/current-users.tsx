@@ -16,10 +16,18 @@ export function CurrentUsers() {
   const onlineUsers = useChatStore((state) => state.onlineUsers);
   const setOnlineUsers = useChatStore((state) => state.setOnlineUsers);
   const currentUser = useChatStore((state) => state.user);
+  const loadingConversation = useChatStore(
+    (state) => state.loadingConversation
+  );
+  const setLoadingConversation = useChatStore(
+    (state) => state.setLoadingConversation
+  );
 
   useEffect(() => {
     if (!SERVER_URL || !currentUser?.nickname) {
-      console.error('VITE_SOCKET_SERVER_URL o el nickname del usuario no están definidos.');
+      console.error(
+        'VITE_SOCKET_SERVER_URL o el nickname del usuario no están definidos.'
+      );
       return;
     }
 
@@ -46,7 +54,9 @@ export function CurrentUsers() {
 
     socket.on('check_or_create_user', (response) => {
       if (response.success) {
-        console.log(`✅ Usuario ${response.user.nickname} registrado correctamente.`);
+        console.log(
+          `✅ Usuario ${response.user.nickname} registrado correctamente.`
+        );
       } else {
         console.error('❌ Error al registrar el usuario:', response.error);
       }
@@ -60,11 +70,13 @@ export function CurrentUsers() {
       console.log('🔌 Desconectado del servidor:', reason);
       setOnlineUsers([]);
     });
-    
+
     // 🚨 CRÍTICO: Responder al heartbeat del servidor.
     // Esto evita que el backend desconecte a los clientes inactivos.
     socket.on('heartbeat_request', () => {
-      console.log('💖 Heartbeat request recibido del servidor, respondiendo...');
+      console.log(
+        '💖 Heartbeat request recibido del servidor, respondiendo...'
+      );
       socket.emit('heartbeat_response');
     });
 
@@ -82,30 +94,44 @@ export function CurrentUsers() {
     };
   }, [setOnlineUsers, currentUser]);
 
+  const handleUserClick = (targetUser: User) => {
+    setLoadingConversation(true);
+    if (!socketRef.current || !currentUser?.id) return;
+    const participantIds = [currentUser.id, targetUser.id];
+    console.log(`💬 Solicitando chat con ${targetUser.nickname}`);
+    socketRef.current.emit('check_or_create_conversation', {
+      participantIds,
+    });
+    setLoadingConversation(false);
+  };
+
   const otherUsers = onlineUsers.filter((user) => user.id !== currentUser?.id);
-  
+
   return (
     <SidebarGroup>
-      <div className="px-2 py-2">
-        <h3 className="text-sm font-medium text-gray-500 mb-2">
+      <div className='px-2 py-2'>
+        <h3 className='text-sm font-medium text-gray-500 mb-2'>
           Otros Usuarios Conectados ({otherUsers.length})
         </h3>
       </div>
       <SidebarMenu>
         {otherUsers.length === 0 ? (
           <SidebarMenuItem>
-            <div className="px-2 py-1 text-sm text-gray-400">
+            <div className='px-2 py-1 text-sm text-gray-400'>
               No hay otros usuarios conectados
             </div>
           </SidebarMenuItem>
         ) : (
           otherUsers.map((user) => (
             <SidebarMenuItem key={user.id}>
-              <SidebarMenuButton>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">{user.nickname}</span>
+              <SidebarMenuButton
+                onDoubleClick={() => handleUserClick(user)}
+                disabled={loadingConversation}
+              >
+                <div className='flex items-center gap-2'>
+                  <div className='w-2 h-2 bg-green-500 rounded-full'></div>
+                  <div className='flex flex-col'>
+                    <span className='text-sm font-medium'>{user.nickname}</span>
                   </div>
                 </div>
               </SidebarMenuButton>

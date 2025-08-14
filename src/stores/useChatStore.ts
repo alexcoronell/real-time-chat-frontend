@@ -8,8 +8,9 @@ interface ChatState {
     nickname: string | null;
     user: User | null;
     onlineUsers: User[];
+    loadingConversation: boolean
     conversations: Conversation[];
-    loading: boolean;
+    selectedConversation: Conversation | null;
     error: string | null;
 }
 
@@ -18,8 +19,9 @@ interface ChatActions {
     clearNickname: () => void;
     setUser: (user: User) => void;
     setOnlineUsers: (users: User[]) => void;
+    setLoadingConversation: (loadingConversation: boolean) => void;
     setConversations: (conversations: Conversation[]) => void;
-    setLoading: (isLoading: boolean) => void;
+    setSelectedConversation: (conversations: Conversation) => void;
     setError: (errorMessage: string | null) => void;
 }
 
@@ -29,15 +31,17 @@ export const useChatStore = create<ChatStore>((set) => ({
     nickname: null,
     user: null,
     onlineUsers: [],
+    loadingConversation: false,
     conversations: [],
-    loading: false,
+    selectedConversation: null,
     error: null,
 
     setNickname: (nickname) => set({ nickname, error: null }),
     clearNickname: () => set({ nickname: null, error: null }),
-    setUser: (user) => set({ user, loading: false }),
-    setOnlineUsers: (onlineUsers) => set({ onlineUsers, loading: false }),
-    setConversations: (conversations) => set({ conversations, loading: false }),
-    setLoading: (isLoading) => set({ loading: isLoading }),
+    setUser: (user) => set({ user }),
+    setOnlineUsers: (onlineUsers) => set({ onlineUsers }),
+    setLoadingConversation: (loadingConversation) => set({ loadingConversation }),
+    setConversations: (conversations) => set({ conversations }),
+    setSelectedConversation: (selectedConversation) => set({ selectedConversation }),
     setError: (errorMessage) => set({ error: errorMessage }),
 }));

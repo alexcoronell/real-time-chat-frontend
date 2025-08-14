@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react';
+// chat-list.tsx
+
+import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import {
   SidebarGroup,
@@ -7,7 +9,7 @@ import {
   SidebarMenuButton,
 } from './ui/sidebar';
 import { useChatStore } from '@/stores/useChatStore';
-import { Conversation } from '@/types/conversation';
+import type { Conversation } from '@/types/conversation';
 
 const SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL;
 
@@ -17,22 +19,85 @@ export function ChatList() {
   const setConversations = useChatStore((state) => state.setConversations);
   const user = useChatStore((state) => state.user);
   const userId = user?.id;
+  const selectedConversation = useChatStore(
+    (state) => state.selectedConversation
+  );
+  const setSelectedConversation = useChatStore(
+    (state) => state.setSelectedConversation
+  );
+
+  const handleSelectConversation = useCallback(
+    (conversationId: number) => {
+      const chat = conversations.find((c) => c.id === conversationId);
+      if (chat) {
+        setSelectedConversation(chat);
+      }
+    },
+    [conversations, setSelectedConversation]
+  );
+
+  // ✅ Función para agregar/actualizar conversación de forma inteligente
+  const updateConversationInList = useCallback(
+    (newConversation: Conversation) => {
+      console.log('🔄 Procesando conversación:', newConversation.id);
+
+      const currentConversations = useChatStore.getState().conversations;
+      const existingIndex = currentConversations.findIndex(
+        (c) => c.id === newConversation.id
+      );
+
+      if (existingIndex !== -1) {
+        // Ya existe, actualizar
+        console.log(
+          '📝 Actualizando conversación existente:',
+          newConversation.id
+        );
+        const updated = [...currentConversations];
+        updated[existingIndex] = newConversation;
+        setConversations(updated);
+      } else {
+        // Nueva conversación, agregar al principio
+        console.log('➕ Agregando nueva conversación:', newConversation.id);
+        const newList = [newConversation, ...currentConversations];
+        setConversations(newList);
+      }
+    },
+    [setConversations]
+  );
+
+  // ✅ Función para agregar conversación inmediatamente (solo para el creador)
+  const addConversationImmediately = useCallback(
+    (newConversation: Conversation) => {
+      console.log(
+        '⚡ Agregando conversación INMEDIATAMENTE:',
+        newConversation.id
+      );
+      updateConversationInList(newConversation);
+    },
+    [updateConversationInList]
+  );
 
   useEffect(() => {
     if (!SERVER_URL || !userId) {
-      console.log(
-        'Faltan datos para la conexión, omitiendo la inicialización del socket.'
-      );
+      console.log('⚠️ Faltan datos para la conexión');
+      return;
+    }
+
+    if (socketRef.current?.connected) {
       return;
     }
 
     if (socketRef.current) {
-      return;
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
+      socketRef.current = null;
     }
+
+    console.log('🔗 Inicializando Socket.IO...');
 
     const socket = io(SERVER_URL, {
       path: '/socket.io',
-      transports: ['polling', 'websocket'],
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
@@ -42,20 +107,61 @@ export function ChatList() {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      console.log('🔗 Conectado al servidor Socket.IO.');
+      console.log('🔗 Conectado al servidor Socket.IO');
+      socket.emit('check_or_create_user', { nickname: user.nickname });
       socket.emit('get_conversations', { userId });
     });
 
-    // 🚨 Corrección: Ahora `data` es el objeto `{ success, conversations }`.
-    // Debemos acceder a `data.conversations` para obtener el array.
+    // ✅ Lista inicial de conversaciones
     socket.on(
       'conversations_list',
-      (data: { success: boolean; conversations: Conversation[] }) => {
-        if (data.success) {
-          console.log('✅ Conversaciones recibidas:', data.conversations);
+      (data: {
+        success: boolean;
+        conversations: Conversation[];
+        error?: string;
+      }) => {
+        if (data.success && Array.isArray(data.conversations)) {
+          console.log(
+            '📋 Conversaciones iniciales recibidas:',
+            data.conversations.length
+          );
           setConversations(data.conversations);
         } else {
           console.error('❌ Error al recibir conversaciones:', data.error);
+        }
+      }
+    );
+
+    // ✅ CLAVE: Resultado inmediato al crear conversación
+    socket.on(
+      'conversation_result',
+      (data: {
+        success: boolean;
+        conversation?: Conversation;
+        error?: string;
+      }) => {
+        console.log('📨 Resultado de conversación recibido:', data);
+
+        if (data.success && data.conversation) {
+          // ✅ Agregar inmediatamente sin esperar otros eventos
+          addConversationImmediately(data.conversation);
+        } else {
+          console.error('❌ Error en conversation_result:', data.error);
+        }
+      }
+    );
+
+    // ✅ Actualizaciones de conversaciones (principalmente para otros usuarios)
+    socket.on(
+      'conversations_updated',
+      (data: { success: boolean; conversation: Conversation }) => {
+        if (data.success && data.conversation) {
+          console.log(
+            '📝 conversations_updated recibido:',
+            data.conversation.id
+          );
+          // Usar la misma función para evitar duplicados
+          updateConversationInList(data.conversation);
         }
       }
     );
@@ -65,20 +171,23 @@ export function ChatList() {
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('🔌 Desconectado del servidor:', reason);
+      console.log('🔌 Desconectado:', reason);
     });
 
     return () => {
       if (socketRef.current) {
-        socketRef.current.off('connect');
-        socketRef.current.off('conversations_list');
-        socketRef.current.off('connect_error');
-        socketRef.current.off('disconnect');
+        socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
         socketRef.current = null;
       }
     };
-  }, [userId, setConversations]);
+  }, [
+    userId,
+    user?.nickname,
+    setConversations,
+    addConversationImmediately,
+    updateConversationInList,
+  ]);
 
   return (
     <SidebarGroup>
@@ -93,7 +202,16 @@ export function ChatList() {
         ) : (
           conversations.map((conversation) => (
             <SidebarMenuItem key={conversation.id}>
-              <SidebarMenuButton>{`Conversación #${conversation.id}`}</SidebarMenuButton>
+              <SidebarMenuButton
+                onClick={() => handleSelectConversation(conversation.id)}
+                className={
+                  selectedConversation?.id === conversation.id
+                    ? 'bg-gray-200'
+                    : ''
+                }
+              >
+                {`Conversación #${conversation.id}`}
+              </SidebarMenuButton>
             </SidebarMenuItem>
           ))
         )}
