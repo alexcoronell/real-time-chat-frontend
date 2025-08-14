@@ -1,7 +1,7 @@
 // chat-list.tsx
 
-import { useEffect, useRef, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useEffect, useCallback } from 'react';
+import { useSocket } from '@/hooks/useSocket';
 import {
   SidebarGroup,
   SidebarMenu,
@@ -11,10 +11,8 @@ import {
 import { useChatStore } from '@/stores/useChatStore';
 import type { Conversation } from '@/types/conversation';
 
-const SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL;
-
 export function ChatList() {
-  const socketRef = useRef<Socket | null>(null);
+  const { socket, isConnected } = useSocket();
   const conversations = useChatStore((state) => state.conversations);
   const setConversations = useChatStore((state) => state.setConversations);
   const user = useChatStore((state) => state.user);
@@ -78,37 +76,11 @@ export function ChatList() {
   );
 
   useEffect(() => {
-    if (!SERVER_URL || !userId) {
-      console.log('⚠️ Faltan datos para la conexión');
-      return;
-    }
-
-    if (socketRef.current?.connected) {
-      return;
-    }
-
-    if (socketRef.current) {
-      socketRef.current.removeAllListeners();
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-
-    console.log('🔗 Inicializando Socket.IO...');
-
-    const socket = io(SERVER_URL, {
-      path: '/socket.io',
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
-      timeout: 20000,
-    });
-
-    socketRef.current = socket;
+    if (!socket || !isConnected) return;
 
     socket.on('connect', () => {
       console.log('🔗 Conectado al servidor Socket.IO');
-      socket.emit('check_or_create_user', { nickname: user.nickname });
+      socket.emit('check_or_create_user', { nickname: user?.nickname });
       socket.emit('get_conversations', { userId });
     });
 
@@ -173,20 +145,14 @@ export function ChatList() {
     socket.on('disconnect', (reason) => {
       console.log('🔌 Desconectado:', reason);
     });
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.removeAllListeners();
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
-    };
   }, [
     userId,
     user?.nickname,
     setConversations,
     addConversationImmediately,
     updateConversationInList,
+    isConnected,
+    socket,
   ]);
 
   return (
