@@ -1,14 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
-import { io, Socket } from 'socket.io-client';
+import { useSocket } from '@/hooks/useSocket';
 
 import { CircleCheck, Ban } from 'lucide-react';
 
 import { useChatStore } from '@/stores/useChatStore';
 
 import type { User } from '@/types/user';
-
-const SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL;
 
 interface Response {
   success: boolean;
@@ -17,7 +15,7 @@ interface Response {
 }
 
 export function CurrentUser() {
-  const socketRef = useRef<Socket | null>(null);
+  const { socket, isConnected } = useSocket();
   const [, navigate] = useLocation();
   const [status, setStatus] = useState<'Conectado' | 'Desconectado'>(
     'Desconectado'
@@ -28,18 +26,13 @@ export function CurrentUser() {
   const setError = useChatStore((state) => state.setError);
 
   useEffect(() => {
+    if (!socket || !isConnected) return;
+
     if (!nickname) {
       setError('Nickname no encontrado. Redirigiendo a la página de login...');
       navigate('/');
       return;
     }
-
-    const socket = io(SERVER_URL, {
-      path: '/socket.io',
-      transports: ['polling', 'websocket'],
-    });
-
-    socketRef.current = socket;
 
     socket.on('connect', () => {
       socket.emit(
@@ -56,12 +49,19 @@ export function CurrentUser() {
         }
       );
     });
-  }, [navigate, nickname, setError, setUser]);
+  }, [socket, isConnected, navigate, nickname, setError, setUser]);
 
   return (
     <div className='flex items-baseline gap-3'>
-    <div className='size-8 flex items-end justify-center'>{ status === 'Conectado' ? <CircleCheck className='size-5 text-green-600' /> : <Ban className='text-red-600 size-5' />}</div>
-      <h4 className='text-lg m-0'>{user?.nickname}:</h4> <span className='text-xs'>{status}</span> 
+      <div className='size-8 flex items-end justify-center'>
+        {status === 'Conectado' ? (
+          <CircleCheck className='size-5 text-green-600' />
+        ) : (
+          <Ban className='text-red-600 size-5' />
+        )}
+      </div>
+      <h4 className='text-lg m-0'>{user?.nickname}:</h4>{' '}
+      <span className='text-xs'>{status}</span>
     </div>
   );
 }
