@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useSocket } from '@/hooks/useSocket';
 
@@ -25,22 +24,13 @@ export function CurrentUser() {
   const setUser = useChatStore((state) => state.setUser);
   const setError = useChatStore((state) => state.setError);
 
-  // ✅ Ref para manejar timeouts y evitar memory leaks
-  const requestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   useEffect(() => {
-    // Limpiar timeout anterior si existe
-    if (requestTimeoutRef.current) {
-      clearTimeout(requestTimeoutRef.current);
-    }
-
     if (!nickname) {
       setError('Nickname no encontrado. Redirigiendo a la página de login...');
       navigate('/');
       return;
     }
 
-    // Estado inicial cuando no hay conexión
     if (!isConnected) {
       setStatus('Desconectado');
       return;
@@ -49,57 +39,26 @@ export function CurrentUser() {
     // ✅ Solo emitir cuando ESTÁ CONECTADO
     if (socket && isConnected) {
       setStatus('Cargando');
-      console.log('📡 Solicitando registro/verificación de usuario...');
-
-      // ✅ Configurar timeout para evitar carga infinita
-      requestTimeoutRef.current = setTimeout(() => {
-        if (status === 'Cargando') {
-          console.warn('⏳ Timeout al registrar usuario');
-          setStatus('Error');
-          setError('Timeout al conectar con el servidor');
-        }
-      }, 5000);
 
       socket.emit(
         'check_or_create_user',
         { nickname },
         (response: Response) => {
-          // ✅ Limpiar timeout al recibir respuesta
-          if (requestTimeoutRef.current) {
-            clearTimeout(requestTimeoutRef.current);
-            requestTimeoutRef.current = null;
-          }
-
           if (response.success) {
             setUser(response.user);
             setStatus('Conectado');
           } else {
-            console.error('❌ Error al registrar usuario:', response.error);
             setError(response.error || 'Error al registrar usuario');
             setStatus('Error');
           }
         }
       );
 
-      // 🚨 CRÍTICO: Responder al heartbeat del servidor.
-      // Esto evita que el backend desconecte a los clientes inactivos.
       socket.on('heartbeat_request', () => {
-        console.log(
-          '💖 Heartbeat request recibido del servidor, respondiendo...'
-        );
         socket.emit('heartbeat_response');
       });
     }
   }, [socket, isConnected, nickname, navigate, setError, setUser]);
-
-  // ✅ Cleanup al desmontar
-  useEffect(() => {
-    return () => {
-      if (requestTimeoutRef.current) {
-        clearTimeout(requestTimeoutRef.current);
-      }
-    };
-  }, []);
 
   return (
     <div className='flex items-baseline gap-3'>
