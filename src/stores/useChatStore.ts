@@ -10,7 +10,7 @@ interface ChatState {
     onlineUsers: User[];
     loadingConversation: boolean
     conversations: Conversation[];
-    selectedConversation: Conversation | null;
+    selectedConversation: number | null;
     error: string | null;
 }
 
@@ -21,7 +21,7 @@ interface ChatActions {
     setOnlineUsers: (users: User[]) => void;
     setLoadingConversation: (loadingConversation: boolean) => void;
     setConversations: (conversations: Conversation[]) => void;
-    setSelectedConversation: (conversations: Conversation) => void;
+    setSelectedConversation: (selectedConversation: number) => void;
     setError: (errorMessage: string | null) => void;
 }
 

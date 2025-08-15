@@ -22,6 +22,9 @@ export function CurrentUsers() {
   const onlineUsers = useChatStore((state) => state.onlineUsers);
   const setOnlineUsers = useChatStore((state) => state.setOnlineUsers);
   const currentUser = useChatStore((state) => state.user);
+  const setSelectedConversation = useChatStore(
+    (state) => state.setSelectedConversation
+  );
   const loadingConversation = useChatStore(
     (state) => state.loadingConversation
   );
@@ -36,8 +39,7 @@ export function CurrentUsers() {
   const usersOnlineHandler = useRef<(data: UsersOnlineResponse) => void>(
     () => {}
   );
-  const heartbeatHandler = useRef<() => void>(() => {});
-  const conversationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const requestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -48,44 +50,16 @@ export function CurrentUsers() {
 
     // ✅ Definir handlers con validación
     usersOnlineHandler.current = (data: unknown) => {
-      // ✅ Validación estricta de respuesta
-      if (!data || typeof data !== 'object' || !('users' in data)) {
-        console.error(
-          '❌ Formato de respuesta inválido para users_online:',
-          data
-        );
-        return;
-      }
-
       const { users } = data as UsersOnlineResponse;
-
-      if (!Array.isArray(users)) {
-        console.error('❌ El campo "users" debe ser un array:', data);
-        return;
-      }
-
-      console.log(`👥 Usuarios actualizados: ${users.length}`);
       setOnlineUsers(users);
-      setIsInitialLoading(false); // ✅ Marcar como cargado
-      setLastRequestTime(Date.now()); // ✅ Registrar tiempo de última respuesta
+      setIsInitialLoading(false);
+      setLastRequestTime(Date.now());
     };
 
-    heartbeatHandler.current = () => {
-      console.log('💖 Heartbeat request recibido');
-      if (socket.connected) {
-        socket.emit('heartbeat_response');
-      }
-    };
-
-    // ✅ Registrar handlers específicos
     socket.on('users_online', usersOnlineHandler.current);
 
-    // ✅ SOLUCIÓN CRÍTICA: Usar el NOMBRE CORRECTO del evento
     const requestUsers = () => {
-      console.log('📡 Solicitando lista de usuarios conectados...');
       socket.emit('get_connected_users');
-
-      // ✅ Configurar timeout para detectar falta de respuesta
       if (requestTimeoutRef.current) {
         clearTimeout(requestTimeoutRef.current);
       }
@@ -96,7 +70,6 @@ export function CurrentUsers() {
           : Infinity;
 
         if (isInitialLoading && timeSinceLastRequest > 5000) {
-          console.warn('⚠️ No se recibió respuesta de usuarios después de 5s');
           setIsInitialLoading(false);
         }
       }, 5000);
@@ -120,49 +93,21 @@ export function CurrentUsers() {
     };
   }, [socket, isConnected]);
 
-  // ✅ Manejo seguro de clics con timeout gestionado
   const handleUserClick = (targetUser: User) => {
+    setLoadingConversation(true);
     if (!socket || !isConnected || !currentUser?.id) {
-      console.error('❌ Socket no disponible o usuario no autenticado');
       setLoadingConversation(false);
       return;
     }
-
     setLoadingConversation(true);
-    console.log(`💬 Solicitando chat con ${targetUser.nickname}`);
-
-    // ✅ Limpiar timeout anterior si existe
-    if (conversationTimeoutRef.current) {
-      clearTimeout(conversationTimeoutRef.current);
-    }
-
-    // ✅ Timeout seguro con cleanup
-    conversationTimeoutRef.current = setTimeout(() => {
-      if (loadingConversation) {
-        console.warn('⏳ Timeout al crear conversación');
-        setLoadingConversation(false);
-      }
-    }, 10000);
-
-    // ✅ Callback para manejar respuesta
-    socket.emit(
-      'check_or_create_conversation',
-      { participantIds: [currentUser.id, targetUser.id] },
-      (response: { success: boolean; error?: string }) => {
-        // ✅ Limpiar timeout al recibir respuesta
-        if (conversationTimeoutRef.current) {
-          clearTimeout(conversationTimeoutRef.current);
-          conversationTimeoutRef.current = null;
-        }
-
-        setLoadingConversation(false);
-
-        if (!response.success) {
-          console.error('❌ Error al crear conversación:', response.error);
-          // Aquí podrías mostrar un toast de error
-        }
-      }
-    );
+    socket.emit('check_or_create_conversation', {
+      participantIds: [currentUser.id, targetUser.id],
+    });
+    socket.on('join_conversation_result', (data) => {
+      setLoadingConversation(false);
+      const { conversation } = data;
+      setSelectedConversation(conversation.id);
+    });
   };
 
   // ✅ Filtro simplificado y seguro (sin redundancia)
