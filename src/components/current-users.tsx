@@ -79,7 +79,6 @@ export function CurrentUsers() {
 
     // ✅ Registrar handlers específicos
     socket.on('users_online', usersOnlineHandler.current);
-    socket.on('heartbeat_request', heartbeatHandler.current);
 
     // ✅ SOLUCIÓN CRÍTICA: Usar el NOMBRE CORRECTO del evento
     const requestUsers = () => {
@@ -112,7 +111,6 @@ export function CurrentUsers() {
     // ✅ Cleanup CORRECTO
     return () => {
       socket.off('users_online', usersOnlineHandler.current);
-      socket.off('heartbeat_request', heartbeatHandler.current);
 
       if (requestTimeoutRef.current) {
         clearTimeout(requestTimeoutRef.current);

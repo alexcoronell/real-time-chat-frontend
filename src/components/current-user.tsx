@@ -80,6 +80,15 @@ export function CurrentUser() {
           }
         }
       );
+
+      // 🚨 CRÍTICO: Responder al heartbeat del servidor.
+      // Esto evita que el backend desconecte a los clientes inactivos.
+      socket.on('heartbeat_request', () => {
+        console.log(
+          '💖 Heartbeat request recibido del servidor, respondiendo...'
+        );
+        socket.emit('heartbeat_response');
+      });
     }
   }, [socket, isConnected, nickname, navigate, setError, setUser]);
 
