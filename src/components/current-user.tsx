@@ -25,31 +25,29 @@ export function CurrentUser() {
   const setUser = useChatStore((state) => state.setUser);
   const setError = useChatStore((state) => state.setError);
 
-  useEffect(() => {
-    if (!socket || !isConnected) return;
+ useEffect(() => {
+  if (!nickname) {
+    setError('Nickname no encontrado. Redirigiendo a la página de login...');
+    navigate('/');
+    return;
+  }
 
-    if (!nickname) {
-      setError('Nickname no encontrado. Redirigiendo a la página de login...');
-      navigate('/');
-      return;
-    }
-
-    socket.on('connect', () => {
-      socket.emit(
-        'check_or_create_user',
-        { nickname },
-        (response: Response) => {
-          if (response.success) {
-            setUser(response.user);
-            setStatus('Conectado');
-          } else {
-            setError(response.error || 'Error al registrar usuario');
-            setStatus('Desconectado');
-          }
-        }
-      );
+  // ✅ Solo emitir cuando ESTÁ CONECTADO
+  if (socket && isConnected) {
+    console.log('✅ EMITIENDO check_or_create_user (socket conectado)');
+    
+    socket.emit('check_or_create_user', { nickname }, (response: Response) => {
+      if (response.success) {
+        setUser(response.user);
+        setStatus('Conectado');
+      } else {
+        setError(response.error || 'Error al registrar usuario');
+        setStatus('Desconectado');
+      }
     });
-  }, [socket, isConnected, navigate, nickname, setError, setUser]);
+  }
+  // ✅ Ahora SÍ dependemos de isConnected para la lógica
+}, [socket, isConnected, nickname, navigate, setError, setUser]);
 
   return (
     <div className='flex items-baseline gap-3'>
