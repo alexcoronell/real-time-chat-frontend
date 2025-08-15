@@ -1,6 +1,5 @@
-// chat-list.tsx
-
-import { useEffect, useCallback } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSocket } from '@/hooks/useSocket';
 import {
   SidebarGroup,
@@ -10,6 +9,20 @@ import {
 } from './ui/sidebar';
 import { useChatStore } from '@/stores/useChatStore';
 import type { Conversation } from '@/types/conversation';
+import { Loader2 } from 'lucide-react';
+
+// Interfaz para validación de respuestas
+interface ConversationsListResponse {
+  success: boolean;
+  conversations: Conversation[];
+  error?: string;
+}
+
+interface ConversationResult {
+  success: boolean;
+  conversation?: Conversation;
+  error?: string;
+}
 
 export function ChatList() {
   const { socket, isConnected } = useSocket();
@@ -24,6 +37,22 @@ export function ChatList() {
     (state) => state.setSelectedConversation
   );
 
+  // ✅ Estados de carga y error
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // ✅ Refs para handlers estables
+  const conversationsListHandler = useRef<
+    (data: ConversationsListResponse) => void
+  >(() => {});
+  const conversationResultHandler = useRef<(data: ConversationResult) => void>(
+    () => {}
+  );
+  const conversationsUpdatedHandler = useRef<
+    (data: { success: boolean; conversation: Conversation }) => void
+  >(() => {});
+  const requestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleSelectConversation = useCallback(
     (conversationId: number) => {
       const chat = conversations.find((c) => c.id === conversationId);
@@ -34,132 +63,201 @@ export function ChatList() {
     [conversations, setSelectedConversation]
   );
 
-  // ✅ Función para agregar/actualizar conversación de forma inteligente
+  // ✅ Actualización segura de conversaciones
   const updateConversationInList = useCallback(
     (newConversation: Conversation) => {
-      console.log('🔄 Procesando conversación:', newConversation.id);
-
-      const currentConversations = useChatStore.getState().conversations;
-      const existingIndex = currentConversations.findIndex(
-        (c) => c.id === newConversation.id
-      );
-
-      if (existingIndex !== -1) {
-        // Ya existe, actualizar
-        console.log(
-          '📝 Actualizando conversación existente:',
-          newConversation.id
+      setConversations((prev) => {
+        // ✅ Tipo explícito para 'c'
+        const existingIndex = prev.findIndex(
+          (c: Conversation) => c.id === newConversation.id
         );
-        const updated = [...currentConversations];
-        updated[existingIndex] = newConversation;
-        setConversations(updated);
-      } else {
-        // Nueva conversación, agregar al principio
-        console.log('➕ Agregando nueva conversación:', newConversation.id);
-        const newList = [newConversation, ...currentConversations];
-        setConversations(newList);
-      }
+
+        if (existingIndex !== -1) {
+          console.log(
+            '📝 Actualizando conversación existente:',
+            newConversation.id
+          );
+          const updated = [...prev];
+          updated[existingIndex] = newConversation;
+          return updated;
+        } else {
+          console.log('➕ Agregando nueva conversación:', newConversation.id);
+          return [newConversation, ...prev];
+        }
+      });
     },
     [setConversations]
   );
 
-  // ✅ Función para agregar conversación inmediatamente (solo para el creador)
-  const addConversationImmediately = useCallback(
-    (newConversation: Conversation) => {
-      console.log(
-        '⚡ Agregando conversación INMEDIATAMENTE:',
-        newConversation.id
-      );
-      updateConversationInList(newConversation);
-    },
-    [updateConversationInList]
-  );
+  // ✅ Manejo seguro de carga inicial
+  const loadConversations = useCallback(() => {
+    if (!socket || !isConnected || !userId) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    console.log('📡 Solicitando conversaciones iniciales...');
+
+    // ✅ Limpiar timeout anterior
+    if (requestTimeoutRef.current) {
+      clearTimeout(requestTimeoutRef.current);
+    }
+
+    // ✅ Configurar timeout seguro
+    requestTimeoutRef.current = setTimeout(() => {
+      if (isLoading) {
+        console.warn('⏳ Timeout al cargar conversaciones');
+        setIsLoading(false);
+        setError('Timeout al cargar conversaciones');
+      }
+    }, 8000);
+
+    // ✅ Solicitar conversaciones
+    socket.emit('get_conversations', { userId });
+  }, [socket, isConnected, userId, isLoading]);
 
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    // ✅ Resetear estado al desconectarse
+    if (!isConnected) {
+      setIsLoading(true);
+      setError(null);
+      return;
+    }
 
-    socket.on('connect', () => {
-      console.log('🔗 Conectado al servidor Socket.IO');
-      socket.emit('check_or_create_user', { nickname: user?.nickname });
-      socket.emit('get_conversations', { userId });
-    });
-
-    // ✅ Lista inicial de conversaciones
-    socket.on(
-      'conversations_list',
-      (data: {
-        success: boolean;
-        conversations: Conversation[];
-        error?: string;
-      }) => {
-        if (data.success && Array.isArray(data.conversations)) {
-          console.log(
-            '📋 Conversaciones iniciales recibidas:',
-            data.conversations.length
-          );
-          setConversations(data.conversations);
-        } else {
-          console.error('❌ Error al recibir conversaciones:', data.error);
-        }
+    // ✅ Definir handlers con validación
+    conversationsListHandler.current = (data: ConversationsListResponse) => {
+      // ✅ Validación estricta
+      if (!data || typeof data !== 'object') {
+        console.error('❌ Formato inválido para conversations_list:', data);
+        return;
       }
-    );
 
-    // ✅ CLAVE: Resultado inmediato al crear conversación
-    socket.on(
-      'conversation_result',
-      (data: {
-        success: boolean;
-        conversation?: Conversation;
-        error?: string;
-      }) => {
-        console.log('📨 Resultado de conversación recibido:', data);
-
-        if (data.success && data.conversation) {
-          // ✅ Agregar inmediatamente sin esperar otros eventos
-          addConversationImmediately(data.conversation);
-        } else {
-          console.error('❌ Error en conversation_result:', data.error);
-        }
+      // ✅ Limpiar timeout al recibir respuesta
+      if (requestTimeoutRef.current) {
+        clearTimeout(requestTimeoutRef.current);
+        requestTimeoutRef.current = null;
       }
-    );
 
-    // ✅ Actualizaciones de conversaciones (principalmente para otros usuarios)
-    socket.on(
-      'conversations_updated',
-      (data: { success: boolean; conversation: Conversation }) => {
-        if (data.success && data.conversation) {
-          console.log(
-            '📝 conversations_updated recibido:',
-            data.conversation.id
-          );
-          // Usar la misma función para evitar duplicados
-          updateConversationInList(data.conversation);
-        }
+      if (data.success && Array.isArray(data.conversations)) {
+        console.log(
+          '📋 Conversaciones iniciales recibidas:',
+          data.conversations.length
+        );
+        setConversations(data.conversations);
+        setIsLoading(false);
+      } else {
+        console.error('❌ Error al recibir conversaciones:', data.error);
+        setIsLoading(false);
+        setError(data.error || 'Error al cargar conversaciones');
       }
-    );
+    };
 
-    socket.on('connect_error', (error) => {
-      console.error('❌ Error de conexión:', error);
-    });
+    conversationResultHandler.current = (data: ConversationResult) => {
+      if (!data || typeof data !== 'object') {
+        console.error('❌ Formato inválido para conversation_result:', data);
+        return;
+      }
 
-    socket.on('disconnect', (reason) => {
-      console.log('🔌 Desconectado:', reason);
-    });
+      if (data.success && data.conversation) {
+        console.log(
+          '⚡ Conversación creada inmediatamente:',
+          data.conversation.id
+        );
+        updateConversationInList(data.conversation);
+      } else {
+        console.error('❌ Error en conversation_result:', data.error);
+        setError(data.error || 'Error al crear conversación');
+      }
+    };
+
+    conversationsUpdatedHandler.current = (data: {
+      success: boolean;
+      conversation: Conversation;
+    }) => {
+      if (!data || typeof data !== 'object' || !data.conversation) {
+        console.error('❌ Formato inválido para conversations_updated:', data);
+        return;
+      }
+
+      console.log('📝 conversations_updated recibido:', data.conversation.id);
+      updateConversationInList(data.conversation);
+    };
+
+    // ✅ Registrar handlers
+    if (socket) {
+      socket.on('conversations_list', conversationsListHandler.current);
+      socket.on('conversation_result', conversationResultHandler.current);
+      socket.on('conversations_updated', conversationsUpdatedHandler.current);
+    }
+
+    // ✅ Solicitar conversaciones inmediatamente
+    loadConversations();
+
+    // ✅ Cleanup CORRECTO
+    return () => {
+      if (socket) {
+        socket.off('conversations_list', conversationsListHandler.current);
+        socket.off('conversation_result', conversationResultHandler.current);
+        socket.off(
+          'conversations_updated',
+          conversationsUpdatedHandler.current
+        );
+      }
+
+      if (requestTimeoutRef.current) {
+        clearTimeout(requestTimeoutRef.current);
+      }
+    };
   }, [
-    userId,
-    user?.nickname,
-    setConversations,
-    addConversationImmediately,
-    updateConversationInList,
-    isConnected,
     socket,
+    isConnected,
+    userId,
+    loadConversations,
+    updateConversationInList,
   ]);
 
   return (
     <SidebarGroup>
-      <h3>Chats</h3>
+      <div className='px-2 py-2'>
+        <h3 className='text-sm font-medium text-gray-500 mb-2 flex items-center'>
+          Chats
+          {/* ✅ Indicadores de estado */}
+          {isLoading && (
+            <span className='ml-2 text-xs text-blue-500 animate-pulse'>
+              Cargando...
+            </span>
+          )}
+          {error && (
+            <span className='ml-2 text-xs text-yellow-500' title={error}>
+              ⚠️
+            </span>
+          )}
+        </h3>
+      </div>
+
       <SidebarMenu>
-        {conversations.length === 0 ? (
+        {/* ✅ Estado de carga */}
+        {isLoading ? (
+          <SidebarMenuItem>
+            <div className='px-2 py-1 text-sm text-gray-400 flex items-center'>
+              <Loader2 className='mr-2 h-4 w-4 animate-spin text-gray-400' />
+              Cargando conversaciones...
+            </div>
+          </SidebarMenuItem>
+        ) : error ? (
+          <SidebarMenuItem>
+            <div className='px-2 py-1 text-sm text-yellow-400 flex items-center'>
+              <span className='mr-2'>⚠️</span>
+              {error}
+              <button
+                onClick={loadConversations}
+                className='ml-2 text-blue-500 hover:underline'
+              >
+                Reintentar
+              </button>
+            </div>
+          </SidebarMenuItem>
+        ) : conversations.length === 0 ? (
           <SidebarMenuItem>
             <div className='px-2 py-1 text-sm text-gray-400'>
               No hay conversaciones
@@ -170,11 +268,11 @@ export function ChatList() {
             <SidebarMenuItem key={conversation.id}>
               <SidebarMenuButton
                 onClick={() => handleSelectConversation(conversation.id)}
-                className={
+                className={`${
                   selectedConversation?.id === conversation.id
                     ? 'bg-gray-200'
-                    : ''
-                }
+                    : 'hover:bg-gray-50'
+                } transition-colors`}
               >
                 {`Conversación #${conversation.id}`}
               </SidebarMenuButton>
